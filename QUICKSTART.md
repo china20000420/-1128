@@ -1,5 +1,21 @@
 # 快速开始指南
 
+## 前置要求
+
+- **Conda**: 已安装Anaconda或Miniconda
+- **Node.js**: 14+ 版本
+- **Conda环境**: 需要创建名为 `fastapi` 的conda环境
+
+## 创建Conda环境（首次使用）
+
+```bash
+# 创建fastapi环境
+conda create -n fastapi python=3.8
+
+# 激活环境
+conda activate fastapi
+```
+
 ## 一分钟快速部署
 
 ### Windows用户
@@ -9,9 +25,12 @@
    deploy.bat
    ```
 
-2. **等待自动完成**
-   - ✅ 检查Python和Node.js环境
-   - ✅ 安装所有依赖
+2. **自动完成以下步骤**
+   - ✅ 激活fastapi conda环境
+   - ✅ 检查Node.js环境
+   - ✅ 配置npm淘宝镜像源
+   - ✅ 安装Python依赖（requirements.txt）
+   - ✅ 安装Node.js依赖
    - ✅ 初始化数据库
    - ✅ 启动前后端服务
    - ✅ 自动打开浏览器
@@ -22,16 +41,16 @@
 
 ### Linux/Mac用户
 
-1. **赋予执行权限并运行**
+1. **激活conda环境**
+   ```bash
+   conda activate fastapi
+   ```
+
+2. **赋予执行权限并运行**
    ```bash
    chmod +x deploy.sh
    ./deploy.sh
    ```
-
-2. **等待自动完成**
-   - 自动检测环境
-   - 安装依赖
-   - 启动服务
 
 3. **登录系统**
    - 浏览器访问: http://localhost:3000
@@ -41,74 +60,91 @@
 
 如果自动部署失败,可以手动执行以下步骤:
 
-### 步骤1: 安装Python依赖
+### 步骤1: 激活conda环境
 ```bash
-pip install -r requirements.txt
+conda activate fastapi
 ```
 
-### 步骤2: 初始化数据库
+### 步骤2: 配置npm镜像源
+```bash
+# 查看当前源
+npm config get registry
+
+# 设置淘宝镜像
+npm config set registry https://registry.npmmirror.com
+
+# 验证设置
+npm config get registry
+```
+
+### 步骤3: 安装依赖
+```bash
+# Python依赖
+pip install -r requirements.txt
+
+# Node.js依赖
+npm install
+```
+
+### 步骤4: 初始化数据库
 ```bash
 cd backend
 python init_db.py
 cd ..
 ```
 
-### 步骤3: 安装Node.js依赖
+### 步骤5: 启动后端（新终端）
 ```bash
-npm install
-```
+# 激活环境
+conda activate fastapi
 
-### 步骤4: 启动后端（新终端）
-```bash
+# 启动后端
 cd backend
 uvicorn main:app --reload --host 0.0.0.0 --port 5000
 ```
 
 或使用脚本:
 ```bash
-# Windows
-start_backend.bat
-
-# Linux/Mac
-chmod +x start_backend.sh && ./start_backend.sh
+start_backend.bat  # Windows
 ```
 
-### 步骤5: 启动前端（新终端）
+### 步骤6: 启动前端（新终端）
 ```bash
 npm run dev
 ```
 
 或使用脚本:
 ```bash
-# Windows
-start_frontend.bat
-
-# Linux/Mac
-chmod +x start_frontend.sh && ./start_frontend.sh
+start_frontend.bat  # Windows
 ```
 
-### 步骤6: 访问系统
+### 步骤7: 访问系统
 打开浏览器访问: http://localhost:3000
 
 ## 常见问题
 
-### Q: Python或Node.js未安装怎么办?
-
-**Python下载**: https://www.python.org/downloads/ (选择3.6+版本)
-
-**Node.js下载**: https://nodejs.org/ (选择LTS版本)
-
-### Q: 依赖安装很慢或失败?
-
-使用国内镜像源:
+### Q: Conda环境不存在?
 
 ```bash
-# Python
-pip install -i https://pypi.tuna.tsinghua.edu.cn/simple -r requirements.txt
+# 创建环境
+conda create -n fastapi python=3.8
 
-# Node.js
+# 激活环境
+conda activate fastapi
+```
+
+### Q: npm安装很慢?
+
+已自动配置淘宝镜像源。如仍然很慢,可手动设置:
+```bash
 npm config set registry https://registry.npmmirror.com
-npm install
+```
+
+### Q: Python依赖安装失败?
+
+使用清华镜像源:
+```bash
+pip install -i https://pypi.tuna.tsinghua.edu.cn/simple -r requirements.txt
 ```
 
 ### Q: 端口被占用怎么办?
@@ -124,7 +160,8 @@ npm install
 
 ```bash
 cd backend
-rm data_version.db
+rm data_version.db  # Linux/Mac
+del data_version.db  # Windows
 python init_db.py
 cd ..
 ```
@@ -134,7 +171,7 @@ cd ..
 删除数据库并重新初始化,会重置为默认账户(admin/admin123):
 ```bash
 cd backend
-rm data_version.db
+del data_version.db
 python init_db.py
 ```
 

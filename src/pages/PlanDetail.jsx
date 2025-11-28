@@ -121,11 +121,48 @@ export default function PlanDetail() {
         message.error('Stage名称已存在')
         return
       }
+
+      // 找到最后一个stage作为模板
+      const lastStageKey = stagesList.length > 0 ? stagesList[stagesList.length - 1].key : null
+
+      // 先创建空stage
       const newStages = { ...stages, [stageName]: { rows: [], merges: [] } }
       setStages(newStages)
       setStagesList([...stagesList, { key: stageName, name: stageName }])
-      message.success('添加成功')
+
+      // 保存新stage
       await axios.post(`/api/plan${planName}`, { description, stages: newStages })
+
+      // 如果有上一个stage，复制其类别结构
+      if (lastStageKey) {
+        try {
+          // 获取上一个stage的类别结构
+          const categoriesRes = await axios.get(`/api/plans/${planName}/stages/${lastStageKey}/categories`)
+          const templateCategories = categoriesRes.data.categories || []
+
+          // 复制类别结构（不包含数据）
+          const newCategories = templateCategories.map(cat => ({
+            ...cat,
+            subcategories: (cat.subcategories || []).map(sub => ({
+              id: Date.now() + Math.random(), // 生成新的ID
+              name: sub.name
+            }))
+          }))
+
+          // 保存新stage的类别结构
+          await axios.post(`/api/plans/${planName}/stages/${stageName}/categories`, {
+            description: categoriesRes.data.description || '',
+            categories: newCategories
+          })
+
+          message.success(`添加成功，已复制 ${lastStageKey.toUpperCase()} 的类别结构`)
+        } catch (error) {
+          console.error('复制类别结构失败:', error)
+          message.success('添加成功')
+        }
+      } else {
+        message.success('添加成功')
+      }
     }
     setStageModalVisible(false)
     window.dispatchEvent(new Event('plansChanged'))
@@ -605,11 +642,10 @@ export default function PlanDetail() {
             name="name"
             label="Stage名称"
             rules={[
-              { required: true, message: '请输入Stage名称' },
-              { pattern: /^[a-zA-Z0-9]+$/, message: 'Stage名称只能包含字母和数字' }
+              { required: true, message: '请输入Stage名称' }
             ]}
           >
-            <Input placeholder="例如：stage1、stage2、mystage" />
+            <Input placeholder="例如：stage1、stage_v2、training-phase" />
           </Form.Item>
         </Form>
       </Modal>

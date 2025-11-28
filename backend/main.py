@@ -545,7 +545,7 @@ def get_visualization_data(plan_name: str, db: Session = Depends(get_db)):
 
             # Add to subcategory stats
             subcategory_stats.append({
-                'name': f"{cat_detail.category_name}/{cat_detail.subcategory_name}",
+                'name': f"{cat_detail.category_name}/{cat_detail.subcategory_name} ({stage.name.upper()})",
                 'stage': stage.name,
                 'category': cat_detail.category_name,
                 'subcategory': cat_detail.subcategory_name,

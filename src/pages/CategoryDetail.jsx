@@ -46,7 +46,7 @@ const EditableCell = ({ value, record, dataIndex, onSave }) => {
   }
 
   if (!isAdmin()) {
-    if (!value) return <span style={{ color: '#ccc' }}>-</span>
+    if (value === '' || value === null || value === undefined) return <span style={{ color: '#ccc' }}>-</span>
     return <span style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{value}</span>
   }
 
@@ -74,7 +74,7 @@ const EditableCell = ({ value, record, dataIndex, onSave }) => {
         wordBreak: 'break-word'
       }}
     >
-      {value || <span style={{ color: '#ccc' }}>双击编辑</span>}
+      {(value !== '' && value !== null && value !== undefined) ? value : <span style={{ color: '#ccc' }}>双击编辑</span>}
     </div>
   )
 }

@@ -183,13 +183,13 @@ export default function Visualization() {
                     cx="50%"
                     cy="50%"
                     outerRadius={120}
-                    label={(entry) => `${entry.name}: ${entry.value.toFixed(2)}T`}
                   >
                     {categoryDistribution.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
-                  <Tooltip />
+                  <Tooltip formatter={(value) => `${value.toFixed(2)}T`} />
+                  <Legend />
                 </PieChart>
               </ResponsiveContainer>
             ) : (
@@ -226,8 +226,8 @@ export default function Visualization() {
           <Card title="一级类别详细统计" bordered={false}>
             <Table
               dataSource={categoryStats}
-              rowKey="category"
-              pagination={{ pageSize: 10 }}
+              rowKey={(record) => `${record.stage}_${record.category}`}
+              pagination={{ pageSize: 10, showSizeChanger: true, showTotal: (total) => `共 ${total} 条` }}
               columns={[
                 {
                   title: '类别名称',
