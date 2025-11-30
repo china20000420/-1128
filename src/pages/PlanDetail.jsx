@@ -210,31 +210,52 @@ export default function PlanDetail() {
           endCol: m.e.c
         }))
 
-        const formatCell = (value, colIdx) => {
+        const formatCell = (value, colIdx, rowIdx) => {
           if (value === '' || value === null || value === undefined) return ''
-          const cellRef = XLSX.utils.encode_cell({ r: 1, c: colIdx })
+
+          // 获取实际单元格引用
+          const cellRef = XLSX.utils.encode_cell({ r: rowIdx + 1, c: colIdx })
           const cell = sheet[cellRef]
-          if (cell && cell.t === 'n' && cell.z && cell.z.includes('%')) {
-            return (value * 100) + '%'
+
+          // 如果是数字类型
+          if (typeof value === 'number') {
+            // 检查是否是百分比格式
+            if (cell && cell.z && (cell.z.includes('%') || cell.z.includes('0.00%'))) {
+              // 如果原始值已经是小数（如0.5代表50%），直接乘100
+              return (value * 100) + '%'
+            }
+
+            // 处理科学计数法：转换为普通数字字符串
+            if (Math.abs(value) < 1 && Math.abs(value) > 0) {
+              // 小数：保留足够的精度
+              return value.toFixed(10).replace(/\.?0+$/, '')
+            } else if (Math.abs(value) >= 1000000) {
+              // 大数：保持原样但转为字符串
+              return value.toString()
+            } else {
+              // 普通数字
+              return value.toString()
+            }
           }
+
           return String(value)
         }
 
         const rows = jsonData.slice(1).map((row, idx) => ({
           key: Date.now() + idx,
-          category: formatCell(row[0], 0),
-          subcategory: formatCell(row[1], 1),
-          total_tokens: formatCell(row[2], 2),
-          sample_ratio: formatCell(row[3], 3),
-          cumulative_ratio: formatCell(row[4], 4),
-          sample_tokens: formatCell(row[5], 5),
-          category_ratio: formatCell(row[6], 6),
-          part1: formatCell(row[7], 7),
-          part2: formatCell(row[8], 8),
-          part3: formatCell(row[9], 9),
-          part4: formatCell(row[10], 10),
-          part5: formatCell(row[11], 11),
-          note: formatCell(row[12], 12)
+          category: formatCell(row[0], 0, idx),
+          subcategory: formatCell(row[1], 1, idx),
+          total_tokens: formatCell(row[2], 2, idx),
+          sample_ratio: formatCell(row[3], 3, idx),
+          cumulative_ratio: formatCell(row[4], 4, idx),
+          sample_tokens: formatCell(row[5], 5, idx),
+          category_ratio: formatCell(row[6], 6, idx),
+          part1: formatCell(row[7], 7, idx),
+          part2: formatCell(row[8], 8, idx),
+          part3: formatCell(row[9], 9, idx),
+          part4: formatCell(row[10], 10, idx),
+          part5: formatCell(row[11], 11, idx),
+          note: formatCell(row[12], 12, idx)
         }))
 
         setStages(prev => ({ ...prev, [stageKey]: { rows, merges: mergeInfo } }))

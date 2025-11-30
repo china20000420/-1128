@@ -9,7 +9,9 @@
       "Bash(python -c \"import models; from database import engine; models.Base.metadata.create_all(bind=engine); print(''Database schema updated'')\")",
       "Bash(python:*)",
       "Bash(curl:*)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(del d:wangzhandeploy.bat d:wangzhanstart_frontend.bat d:wangzhanstart_backend.bat)",
+      "Bash(rm:*)"
     ],
     "deny": [],
     "ask": []

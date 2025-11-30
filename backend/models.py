@@ -23,6 +23,7 @@ class Stage(Base):
     name = Column(String, index=True)
     plan_id = Column(Integer, ForeignKey("plans.id"))
     description = Column(Text, default="")
+    stage_order = Column(Integer, default=0)  # 添加顺序字段
     plan = relationship("Plan", back_populates="stages")
     rows = relationship("TableRow", back_populates="stage", cascade="all, delete-orphan")
     _merges = Column("merges", Text, default="[]")

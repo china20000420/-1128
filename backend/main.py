@@ -115,8 +115,8 @@ def create_plan(plan: PlanCreate, admin: models.User = Depends(require_admin), d
     db.refresh(db_plan)
 
     # Automatically create 4 stages for the new plan
-    for stage_name in ['stage1', 'stage2', 'stage3', 'stage4']:
-        stage = models.Stage(name=stage_name, plan_id=db_plan.id, description="", categories=[])
+    for order, stage_name in enumerate(['stage1', 'stage2', 'stage3', 'stage4']):
+        stage = models.Stage(name=stage_name, plan_id=db_plan.id, description="", categories=[], stage_order=order)
         db.add(stage)
 
     db.commit()
@@ -150,13 +150,13 @@ def get_plan(plan_name: str, db: Session = Depends(get_db)):
         db.refresh(plan)
 
         # Create default stages for new plan
-        for stage_name in ['stage1', 'stage2', 'stage3', 'stage4']:
-            stage = models.Stage(name=stage_name, plan_id=plan.id, description="", categories=[])
+        for order, stage_name in enumerate(['stage1', 'stage2', 'stage3', 'stage4']):
+            stage = models.Stage(name=stage_name, plan_id=plan.id, description="", categories=[], stage_order=order)
             db.add(stage)
         db.commit()
 
-    # Load all stages dynamically from database
-    stages = db.query(models.Stage).filter(models.Stage.plan_id == plan.id).all()
+    # Load all stages dynamically from database, sorted by stage_order
+    stages = db.query(models.Stage).filter(models.Stage.plan_id == plan.id).order_by(models.Stage.stage_order, models.Stage.id).all()
 
     stages_data = {}
     for stage in stages:
@@ -212,16 +212,29 @@ def save_plan(plan_name: str, data: Plan72BData, admin: models.User = Depends(re
             db.query(models.CategoryDetail).filter(models.CategoryDetail.stage_id == stage.id).delete()
             db.delete(stage)
 
-    # Add or update stages
-    for stage_name, stage_data in data.stages.items():
+    # Add or update stages (maintain order from incoming data)
+    for order, (stage_name, stage_data) in enumerate(data.stages.items()):
         stage = db.query(models.Stage).filter(
             models.Stage.plan_id == plan.id,
             models.Stage.name == stage_name
         ).first()
 
         if not stage:
-            # Create new stage
-            stage = models.Stage(name=stage_name, plan_id=plan.id, description="", categories=[])
+            # Create new stage with proper order
+            # Get current max order
+            max_order_result = db.query(models.Stage).filter(
+                models.Stage.plan_id == plan.id
+            ).order_by(models.Stage.stage_order.desc()).first()
+
+            next_order = (max_order_result.stage_order + 1) if max_order_result else 0
+
+            stage = models.Stage(
+                name=stage_name,
+                plan_id=plan.id,
+                description="",
+                categories=[],
+                stage_order=next_order
+            )
             db.add(stage)
             db.commit()
             db.refresh(stage)
@@ -362,7 +375,52 @@ def get_stage_categories(plan_name: str, stage_name: str, db: Session = Depends(
         db.commit()
         db.refresh(stage)
 
-    return {"description": stage.description, "categories": stage.categories}
+    # 获取所有CategoryDetail数据并构建统计字典
+    category_details = db.query(models.CategoryDetail).filter(
+        models.CategoryDetail.stage_id == stage.id
+    ).all()
+
+    # 构建统计字典：{(category_name, subcategory_name): {tokenCountTotal, actualTokenTotal}}
+    stats_dict = {}
+    for detail in category_details:
+        key = (detail.category_name, detail.subcategory_name)
+        stats_dict[key] = {
+            'tokenCountTotal': detail.token_count_total or '0',
+            'actualTokenTotal': detail.actual_token_total or '0'
+        }
+
+    # 将统计数据合并到categories中
+    categories_with_stats = []
+    for category in stage.categories:
+        subcategories_with_stats = []
+        category_token_total = 0.0
+        category_actual_total = 0.0
+
+        for sub in category.get('subcategories', []):
+            key = (category['name'], sub['name'])
+            stats = stats_dict.get(key, {'tokenCountTotal': '0', 'actualTokenTotal': '0'})
+
+            subcategories_with_stats.append({
+                **sub,
+                'tokenCountTotal': stats['tokenCountTotal'],
+                'actualTokenTotal': stats['actualTokenTotal']
+            })
+
+            # 累加到一级类别
+            category_token_total += float(stats['tokenCountTotal'])
+            category_actual_total += float(stats['actualTokenTotal'])
+
+        categories_with_stats.append({
+            **category,
+            'subcategories': subcategories_with_stats,
+            'tokenCountTotal': f"{category_token_total:.2f}",
+            'actualTokenTotal': f"{category_actual_total:.2f}"
+        })
+
+    return {
+        "description": stage.description,
+        "categories": categories_with_stats
+    }
 
 @app.post("/api/plans/{plan_name}/stages/{stage_name}/categories")
 def save_stage_categories(
@@ -492,8 +550,8 @@ def get_visualization_data(plan_name: str, db: Session = Depends(get_db)):
     if not plan:
         raise HTTPException(status_code=404, detail="Plan not found")
 
-    # Get all stages for this plan
-    stages = db.query(models.Stage).filter(models.Stage.plan_id == plan.id).all()
+    # Get all stages for this plan, sorted by stage_order
+    stages = db.query(models.Stage).filter(models.Stage.plan_id == plan.id).order_by(models.Stage.stage_order, models.Stage.id).all()
 
     # Initialize statistics
     total_token_count = 0

@@ -13,6 +13,7 @@ export default function StageDetail() {
   const navigate = useNavigate()
   const [description, setDescription] = useState('')
   const [categories, setCategories] = useState([])
+  const [loading, setLoading] = useState(true)
   const [modalVisible, setModalVisible] = useState(false)
   const [editingCategory, setEditingCategory] = useState(null)
   const [subModalVisible, setSubModalVisible] = useState(false)
@@ -23,6 +24,18 @@ export default function StageDetail() {
 
   useEffect(() => {
     loadData()
+
+    // 监听页面可见性变化，从其他页面返回时重新加载
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        loadData()
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
   }, [planName, stageName])
 
   useEffect(() => {
@@ -35,55 +48,16 @@ export default function StageDetail() {
 
   const loadData = async () => {
     try {
+      setLoading(true)
       const res = await axios.get(`/api/plans/${planName}/stages/${stageName}/categories`)
       setDescription(res.data.description || '')
-
-      // Load categories with their totals
-      const categoriesData = res.data.categories || []
-      const categoriesWithTotals = await Promise.all(
-        categoriesData.map(async (category) => {
-          const subcategoriesWithTotals = await Promise.all(
-            (category.subcategories || []).map(async (sub) => {
-              try {
-                const detailRes = await axios.get(
-                  `/api/plans/${planName}/stages/${stageName}/categories/${encodeURIComponent(category.name)}/${encodeURIComponent(sub.name)}`
-                )
-                return {
-                  ...sub,
-                  tokenCountTotal: detailRes.data.tokenCountTotal || '0',
-                  actualTokenTotal: detailRes.data.actualTokenTotal || '0'
-                }
-              } catch (error) {
-                return {
-                  ...sub,
-                  tokenCountTotal: '0',
-                  actualTokenTotal: '0'
-                }
-              }
-            })
-          )
-
-          // Calculate category totals from subcategories
-          const categoryTokenCount = subcategoriesWithTotals.reduce(
-            (sum, sub) => sum + (parseFloat(sub.tokenCountTotal) || 0), 0
-          ).toFixed(2)
-          const categoryActualToken = subcategoriesWithTotals.reduce(
-            (sum, sub) => sum + (parseFloat(sub.actualTokenTotal) || 0), 0
-          ).toFixed(2)
-
-          return {
-            ...category,
-            subcategories: subcategoriesWithTotals,
-            tokenCountTotal: categoryTokenCount,
-            actualTokenTotal: categoryActualToken
-          }
-        })
-      )
-
-      setCategories(categoriesWithTotals)
+      // 后端已经返回了所有统计数据，直接使用
+      setCategories(res.data.categories || [])
     } catch (error) {
       console.error('Load error:', error)
       message.error('加载数据失败')
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -127,12 +101,26 @@ export default function StageDetail() {
     const values = await form.validateFields()
     let newCategories
     if (editingCategory) {
+      // 编辑时检查名称是否与其他类别重复
+      const isDuplicate = categories.some(c =>
+        c.id !== editingCategory.id && c.name === values.name
+      )
+      if (isDuplicate) {
+        message.error('一级类别名称已存在，请使用其他名称')
+        return
+      }
       newCategories = categories.map(c =>
         c.id === editingCategory.id ? { ...c, name: values.name } : c
       )
       setCategories(newCategories)
       message.success('修改成功')
     } else {
+      // 添加时检查名称是否已存在
+      const isDuplicate = categories.some(c => c.name === values.name)
+      if (isDuplicate) {
+        message.error('一级类别名称已存在，请使用其他名称')
+        return
+      }
       const newCategory = {
         id: Date.now(),
         name: values.name,
@@ -180,7 +168,20 @@ export default function StageDetail() {
   const handleSubcategorySubmit = async () => {
     const values = await subForm.validateFields()
     let newCategories
+
+    // 获取当前一级类别下的所有二级类别
+    const currentCategoryData = categories.find(c => c.id === currentCategory.id)
+    const existingSubcategories = currentCategoryData?.subcategories || []
+
     if (editingSubcategory) {
+      // 编辑时检查名称是否与同一级类别下的其他二级类别重复
+      const isDuplicate = existingSubcategories.some(s =>
+        s.id !== editingSubcategory.id && s.name === values.name
+      )
+      if (isDuplicate) {
+        message.error('该一级类别下已存在同名的二级类别，请使用其他名称')
+        return
+      }
       newCategories = categories.map(c =>
         c.id === currentCategory.id
           ? {
@@ -194,6 +195,12 @@ export default function StageDetail() {
       setCategories(newCategories)
       message.success('修改成功')
     } else {
+      // 添加时检查名称是否已存在
+      const isDuplicate = existingSubcategories.some(s => s.name === values.name)
+      if (isDuplicate) {
+        message.error('该一级类别下已存在同名的二级类别，请使用其他名称')
+        return
+      }
       const newSubcategory = {
         id: Date.now(),
         name: values.name
@@ -299,7 +306,7 @@ export default function StageDetail() {
               <List
                 size="small"
                 dataSource={category.subcategories || []}
-                locale={{ emptyText: <div style={{ padding: '8px 0', fontSize: '12px', color: '#999' }}>暂无数据</div> }}
+                locale={{ emptyText: loading ? <div style={{ padding: '8px 0', fontSize: '12px', color: '#999' }}>加载中...</div> : <div style={{ padding: '8px 0', fontSize: '12px', color: '#999' }}>暂无数据</div> }}
                 renderItem={sub => (
                   <List.Item
                     actions={isAdmin() ? [
@@ -360,6 +367,15 @@ export default function StageDetail() {
         open={subModalVisible}
         onOk={handleSubcategorySubmit}
         onCancel={() => setSubModalVisible(false)}
+        afterOpenChange={(open) => {
+          if (open) {
+            // 延迟聚焦，确保DOM已渲染
+            setTimeout(() => {
+              const input = document.querySelector('.ant-modal input')
+              if (input) input.focus()
+            }, 100)
+          }
+        }}
       >
         <Form form={subForm} layout="vertical">
           <Form.Item
@@ -367,7 +383,7 @@ export default function StageDetail() {
             label="子类别名称"
             rules={[{ required: true, message: '请输入子类别名称' }]}
           >
-            <Input placeholder="请输入子类别名称" />
+            <Input placeholder="请输入子类别名称" autoFocus />
           </Form.Item>
         </Form>
       </Modal>
