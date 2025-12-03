@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(del PlanDetail.jsx)",
+      "Bash(curl http://127.0.0.1:5000/api/plan72b)",
+      "Bash(del \"d:\\wangzhan\\src\\components\\RichTextEditor.jsx\" \"d:\\wangzhan\\src\\pages\\PlanList.jsx\" \"d:\\wangzhan\\src\\pages\\PlanOverview.jsx\" \"d:\\wangzhan\\src\\pages\\StageDetail.jsx\" \"d:\\wangzhan\\src\\components\\EditableTable.jsx\")",
+      "Bash(python -c \"import models; from database import engine; models.Base.metadata.create_all(bind=engine); print(''Schema updated'')\")",
+      "Bash(curl http://127.0.0.1:5000/api/plans/72b/stages/stage1/categories)",
+      "Bash(python -c \"import models; from database import engine; models.Base.metadata.create_all(bind=engine); print(''Database schema updated'')\")",
+      "Bash(python:*)",
+      "Bash(curl:*)",
+      "Bash(npm install:*)",
+      "Bash(del d:wangzhandeploy.bat d:wangzhanstart_frontend.bat d:wangzhanstart_backend.bat)",
+      "Bash(rm:*)",
+      "Bash(del:*)",
+      "Bash(dir:*)",
+      "Bash(chmod:*)",
+      "Bash(conda --version:*)",
+      "Bash(node --version:*)",
+      "Bash(npm --version:*)",
+      "Bash(for file in setup_environment.bat start_fresh.bat start_normal.bat setup_environment.sh start_fresh.sh start_normal.sh)",
+      "Bash(do if [ -f \"$file\" ])",
+      "Bash(then echo \"✓ $file\")",
+      "Bash(else echo \"✗ $file\")",
+      "Bash(fi)",
+      "Bash(done)",
+      "Bash(copy:*)",
+      "Bash(xargs:*)",
+      "Bash(pip install:*)",
+      "Bash(playwright install:*)",
+      "Bash(taskkill:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

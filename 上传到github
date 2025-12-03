@@ -1,0 +1,46 @@
+@echo off
+echo ========================================
+echo GitHub 协作上传工具
+echo ========================================
+
+REM 1. 设置用户信息（第一次使用需要）
+git config --global user.name "协作者姓名"
+git config --global user.email "协作者邮箱@example.com"
+
+REM 2. 克隆仓库（如果还没有本地仓库）
+if not exist "-1128" (
+    echo 正在克隆仓库...
+    git clone https://github.com/china20000420/-1128.git
+    cd -1128
+) else (
+    echo 仓库已存在，进入目录...
+    cd -1128
+)
+
+REM 3. 拉取最新代码（避免冲突）
+echo 正在拉取最新代码...
+git pull origin main
+
+REM 4. 显示当前状态
+echo 当前文件状态，哪些文件修改了：
+git status
+
+REM 5. 添加所有修改的文件
+echo 正在添加修改的文件...
+git add .
+
+REM 6. 提交更改
+set /p commit_msg="请输入提交描述: "
+git commit -m "%commit_msg%"
+
+REM 7. 推送到远程仓库
+echo 正在推送到GitHub...
+git push origin main
+
+REM 8. 完成提示
+echo ========================================
+echo 代码已成功上传到GitHub仓库！
+echo 仓库地址: https://github.com/china20000420/-1128
+echo ========================================
+
+pause
