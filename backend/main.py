@@ -671,8 +671,18 @@ def update_row(
             models.CategoryDetail.subcategory_name == subcategory_name
         ).first()
 
+        # 如果CategoryDetail不存在，创建一个新的
         if not category_data:
-            raise HTTPException(status_code=404, detail="Category not found")
+            category_data = models.CategoryDetail(
+                stage_id=stage.id,
+                category_name=category_name,
+                subcategory_name=subcategory_name,
+                description="",
+                token_count_total="0",
+                actual_token_total="0"
+            )
+            plan_db.add(category_data)
+            plan_db.flush()  # 确保ID被分配
 
         rows = category_data.rows
         found = False
@@ -680,12 +690,12 @@ def update_row(
             if row.get('key') == data.key:
                 rows[i] = {
                     'key': data.key,
-                    'hdfs_path': data.hdfs_path,
-                    'obs_fuzzy_path': data.obs_fuzzy_path,
-                    'obs_full_path': data.obs_full_path,
-                    'token_count': data.token_count,
-                    'actual_usage': data.actual_usage,
-                    'actual_token': data.actual_token
+                    'hdfs_path': data.hdfs_path or '',
+                    'obs_fuzzy_path': data.obs_fuzzy_path or '',
+                    'obs_full_path': data.obs_full_path or '',
+                    'token_count': data.token_count or '',
+                    'actual_usage': data.actual_usage or '',
+                    'actual_token': data.actual_token or ''
                 }
                 found = True
                 break
@@ -693,19 +703,31 @@ def update_row(
         if not found:
             rows.append({
                 'key': data.key,
-                'hdfs_path': data.hdfs_path,
-                'obs_fuzzy_path': data.obs_fuzzy_path,
-                'obs_full_path': data.obs_full_path,
-                'token_count': data.token_count,
-                'actual_usage': data.actual_usage,
-                'actual_token': data.actual_token
+                'hdfs_path': data.hdfs_path or '',
+                'obs_fuzzy_path': data.obs_fuzzy_path or '',
+                'obs_full_path': data.obs_full_path or '',
+                'token_count': data.token_count or '',
+                'actual_usage': data.actual_usage or '',
+                'actual_token': data.actual_token or ''
             })
 
         category_data.rows = rows
 
         # Recalculate totals
-        token_total = sum(float(r.get('token_count', 0) or 0) for r in rows)
-        actual_total = sum(float(r.get('actual_token', 0) or 0) for r in rows)
+        token_total = 0.0
+        actual_total = 0.0
+        for r in rows:
+            try:
+                token_count = r.get('token_count', '') or '0'
+                token_total += float(token_count)
+            except (ValueError, TypeError):
+                pass
+            try:
+                actual_token = r.get('actual_token', '') or '0'
+                actual_total += float(actual_token)
+            except (ValueError, TypeError):
+                pass
+
         category_data.token_count_total = f"{token_total:.2f}"
         category_data.actual_token_total = f"{actual_total:.2f}"
 
