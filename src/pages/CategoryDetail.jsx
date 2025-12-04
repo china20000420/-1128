@@ -90,6 +90,7 @@ export default function CategoryDetail() {
   const [pageSize, setPageSize] = useState(20)
   const [tokenCountTotal, setTokenCountTotal] = useState('0')
   const [actualTokenTotal, setActualTokenTotal] = useState('0')
+  const [hoveredRowKey, setHoveredRowKey] = useState(null)
   const autoSaveTimer = useRef(null)
 
   const stageTitle = {
@@ -221,14 +222,12 @@ export default function CategoryDetail() {
       title: 'v3词表hdfs路径',
       dataIndex: 'hdfs_path',
       key: 'hdfs_path',
-      width: 300,
-      ellipsis: true,
+      width: 400,
       render: (value, record) => (
         <div style={{
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-          maxWidth: 280
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-all',
+          padding: '4px 0'
         }}>
           {value || '-'}
         </div>
@@ -239,17 +238,42 @@ export default function CategoryDetail() {
       dataIndex: 'obs_fuzzy_path',
       key: 'obs_fuzzy_path',
       width: 300,
-      ellipsis: true,
-      render: (value) => (
-        <div style={{
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-          maxWidth: 280
-        }}>
-          {value || '-'}
-        </div>
-      )
+      render: (value, record) => {
+        const isHovered = hoveredRowKey === record.key
+        return (
+          <div style={{
+            overflow: 'hidden',
+            textOverflow: isHovered ? 'clip' : 'ellipsis',
+            whiteSpace: isHovered ? 'pre-wrap' : 'nowrap',
+            wordBreak: isHovered ? 'break-all' : 'normal',
+            maxWidth: isHovered ? 'none' : 280,
+            padding: '4px 0'
+          }}>
+            {value || '-'}
+          </div>
+        )
+      }
+    },
+    {
+      title: 'obs补全路径',
+      dataIndex: 'obs_full_path',
+      key: 'obs_full_path',
+      width: 300,
+      render: (value, record) => {
+        const isHovered = hoveredRowKey === record.key
+        return (
+          <div style={{
+            overflow: 'hidden',
+            textOverflow: isHovered ? 'clip' : 'ellipsis',
+            whiteSpace: isHovered ? 'pre-wrap' : 'nowrap',
+            wordBreak: isHovered ? 'break-all' : 'normal',
+            maxWidth: isHovered ? 'none' : 280,
+            padding: '4px 0'
+          }}>
+            {value || '-'}
+          </div>
+        )
+      }
     },
     {
       title: '数据集总token',
@@ -388,26 +412,63 @@ export default function CategoryDetail() {
           return
         }
 
-        // 【覆盖模式】先清空现有数据，然后导入新数据
+        // 【覆盖模式】第一步：清空现有数据
         message.loading({ content: '正在清空现有数据...', key: 'import', duration: 0 })
 
-        // 使用POST接口直接覆盖整个数据集
         try {
-          const res = await axios.post(
+          // 先删除所有现有数据（获取所有keys）
+          const currentDataRes = await axios.get(
             `/api/plans/${planName}/stages/${stageName}/categories/${categoryName}/${subcategoryName}`,
-            {
-              description: description, // 保留原有描述
-              rows: newRows,
-              tokenCountTotal: '0', // 后端会重新计算
-              actualTokenTotal: '0'
-            }
+            { params: { page: 1, page_size: 999999 } }
           )
 
-          // 更新Token统计
-          setTokenCountTotal(res.data.tokenCountTotal || '0')
-          setActualTokenTotal(res.data.actualTokenTotal || '0')
+          const allCurrentRows = currentDataRes.data.rows || []
+          if (allCurrentRows.length > 0) {
+            const allKeys = allCurrentRows.map(r => r.key)
+            await axios.delete(
+              `/api/plans/${planName}/stages/${stageName}/categories/${categoryName}/${subcategoryName}/rows`,
+              { data: { keys: allKeys } }
+            )
+          }
 
-          message.success({ content: `成功导入 ${newRows.length} 条数据（覆盖模式）`, key: 'import' })
+          // 第二步：逐行导入新数据（显示进度）
+          message.loading({ content: `正在导入数据... (0/${newRows.length})`, key: 'import', duration: 0 })
+
+          let successCount = 0
+          let lastTokenTotal = '0'
+          let lastActualTotal = '0'
+
+          for (let i = 0; i < newRows.length; i++) {
+            const row = newRows[i]
+            try {
+              const res = await axios.patch(
+                `/api/plans/${planName}/stages/${stageName}/categories/${categoryName}/${subcategoryName}/row`,
+                row
+              )
+              successCount++
+
+              // 保存最后的Token统计
+              if (res.data) {
+                lastTokenTotal = res.data.tokenCountTotal || '0'
+                lastActualTotal = res.data.actualTokenTotal || '0'
+              }
+
+              // 更新进度
+              message.loading({
+                content: `正在导入数据... (${successCount}/${newRows.length})`,
+                key: 'import',
+                duration: 0
+              })
+            } catch (error) {
+              console.error(`导入第 ${i + 1} 行失败:`, error)
+            }
+          }
+
+          // 更新Token统计显示
+          setTokenCountTotal(lastTokenTotal)
+          setActualTokenTotal(lastActualTotal)
+
+          message.success({ content: `成功导入 ${successCount} 条数据（覆盖模式）`, key: 'import' })
 
           // 重新加载第一页数据
           setCurrentPage(1)
@@ -536,7 +597,7 @@ export default function CategoryDetail() {
         }}
         bordered
         size="small"
-        scroll={{ x: 1200 }}
+        scroll={{ x: 1500 }}
         rowSelection={isAdmin() ? {
           selectedRowKeys,
           onChange: setSelectedRowKeys
@@ -549,6 +610,8 @@ export default function CategoryDetail() {
         }}
         onRow={(record) => ({
           onClick: () => handleRowClick(record),
+          onMouseEnter: () => setHoveredRowKey(record.key),
+          onMouseLeave: () => setHoveredRowKey(null),
           style: { cursor: 'pointer' }
         })}
       />
