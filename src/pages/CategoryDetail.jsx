@@ -388,48 +388,34 @@ export default function CategoryDetail() {
           return
         }
 
-        // 保存到数据库
-        message.loading({ content: `正在导入数据... (0/${newRows.length})`, key: 'import', duration: 0 })
+        // 【覆盖模式】先清空现有数据，然后导入新数据
+        message.loading({ content: '正在清空现有数据...', key: 'import', duration: 0 })
 
-        // 批量保存每一行到数据库
-        let successCount = 0
-        let lastTokenTotal = '0'
-        let lastActualTotal = '0'
-
-        for (let i = 0; i < newRows.length; i++) {
-          const row = newRows[i]
-          try {
-            const res = await axios.patch(
-              `/api/plans/${planName}/stages/${stageName}/categories/${categoryName}/${subcategoryName}/row`,
-              row
-            )
-            successCount++
-
-            // 保存最后的Token统计
-            if (res.data) {
-              lastTokenTotal = res.data.tokenCountTotal || '0'
-              lastActualTotal = res.data.actualTokenTotal || '0'
+        // 使用POST接口直接覆盖整个数据集
+        try {
+          const res = await axios.post(
+            `/api/plans/${planName}/stages/${stageName}/categories/${categoryName}/${subcategoryName}`,
+            {
+              description: description, // 保留原有描述
+              rows: newRows,
+              tokenCountTotal: '0', // 后端会重新计算
+              actualTokenTotal: '0'
             }
+          )
 
-            // 更新进度
-            message.loading({
-              content: `正在导入数据... (${successCount}/${newRows.length})`,
-              key: 'import',
-              duration: 0
-            })
-          } catch (error) {
-            console.error(`导入第 ${i + 1} 行失败:`, error)
-          }
+          // 更新Token统计
+          setTokenCountTotal(res.data.tokenCountTotal || '0')
+          setActualTokenTotal(res.data.actualTokenTotal || '0')
+
+          message.success({ content: `成功导入 ${newRows.length} 条数据（覆盖模式）`, key: 'import' })
+
+          // 重新加载第一页数据
+          setCurrentPage(1)
+          loadData(1)
+        } catch (error) {
+          console.error('Import error:', error)
+          message.error({ content: '导入失败: ' + (error.response?.data?.detail || error.message), key: 'import' })
         }
-
-        // 更新Token统计显示
-        setTokenCountTotal(lastTokenTotal)
-        setActualTokenTotal(lastActualTotal)
-
-        message.success({ content: `成功导入 ${successCount}/${newRows.length} 条数据`, key: 'import' })
-
-        // 重新加载数据
-        loadData(currentPage)
 
       } catch (error) {
         console.error('Import error:', error)
@@ -473,23 +459,20 @@ export default function CategoryDetail() {
         data: { keys: selectedRowKeys }
       })
 
-      setTotal(res.data.total)
-      setTokenCountTotal(res.data.tokenCountTotal)
-      setActualTokenTotal(res.data.actualTokenTotal)
-      setRows(prev => prev.filter(row => !selectedRowKeys.includes(row.key)))
-      setSelectedRowKeys([])
-      setExpandedRowKeys(prev => prev.filter(key => !selectedRowKeys.includes(key)))
-      message.success('删除成功')
+      // 更新Token统计
+      setTokenCountTotal(res.data.tokenCountTotal || '0')
+      setActualTokenTotal(res.data.actualTokenTotal || '0')
 
-      // 如果当前页没有数据了，回到上一页
-      if (rows.length === selectedRowKeys.length && currentPage > 1) {
-        setCurrentPage(currentPage - 1)
-      } else {
-        loadData()
-      }
+      // 清空选中状态
+      setSelectedRowKeys([])
+
+      message.success(`成功删除 ${selectedRowKeys.length} 条数据`)
+
+      // 重新加载当前页数据
+      loadData(currentPage)
     } catch (error) {
       console.error('Delete error:', error)
-      message.error('删除失败')
+      message.error('删除失败: ' + (error.response?.data?.detail || error.message))
     }
   }
 

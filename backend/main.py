@@ -622,10 +622,31 @@ def save_category_detail(
 
         category_data.description = data.description
         category_data.rows = data.rows
-        category_data.token_count_total = data.tokenCountTotal
-        category_data.actual_token_total = data.actualTokenTotal
+
+        # 重新计算Token统计
+        token_total = 0.0
+        actual_total = 0.0
+        for r in data.rows:
+            try:
+                token_count = r.get('token_count', '') or '0'
+                token_total += float(token_count)
+            except (ValueError, TypeError):
+                pass
+            try:
+                actual_token = r.get('actual_token', '') or '0'
+                actual_total += float(actual_token)
+            except (ValueError, TypeError):
+                pass
+
+        category_data.token_count_total = f"{token_total:.2f}"
+        category_data.actual_token_total = f"{actual_total:.2f}"
+
         plan_db.commit()
-        return {"success": True}
+        return {
+            "success": True,
+            "tokenCountTotal": category_data.token_count_total,
+            "actualTokenTotal": category_data.actual_token_total
+        }
     finally:
         plan_db.close()
 
@@ -823,9 +844,21 @@ def delete_rows(
         rows = [r for r in category_data.rows if r.get('key') not in data.keys]
         category_data.rows = rows
 
-        # Recalculate totals
-        token_total = sum(float(r.get('token_count', 0) or 0) for r in rows)
-        actual_total = sum(float(r.get('actual_token', 0) or 0) for r in rows)
+        # Recalculate totals with error handling
+        token_total = 0.0
+        actual_total = 0.0
+        for r in rows:
+            try:
+                token_count = r.get('token_count', '') or '0'
+                token_total += float(token_count)
+            except (ValueError, TypeError):
+                pass
+            try:
+                actual_token = r.get('actual_token', '') or '0'
+                actual_total += float(actual_token)
+            except (ValueError, TypeError):
+                pass
+
         category_data.token_count_total = f"{token_total:.2f}"
         category_data.actual_token_total = f"{actual_total:.2f}"
 

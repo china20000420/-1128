@@ -28,7 +28,8 @@
       "Bash(xargs:*)",
       "Bash(pip install:*)",
       "Bash(playwright install:*)",
-      "Bash(taskkill:*)"
+      "Bash(taskkill:*)",
+      "Bash(git checkout:*)"
     ],
     "deny": [],
     "ask": []
