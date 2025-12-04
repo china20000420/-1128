@@ -22,6 +22,9 @@ echo 正在拉取最新代码...
 git pull origin main
 
 
+
+
+
 # 1. 确保已经初始化了Git
 git init
 
@@ -29,6 +32,7 @@ git init
 git remote add origin https://github.com/china20000420/-1128
 
 #如果branch是master那么执行
+git branch
 git branch -M main
 
 REM 4. 显示当前状态
@@ -40,7 +44,7 @@ echo 正在添加修改的文件...
 git add .
 
 REM 6. 提交更改
-set /p commit_msg="1203版"
+set /p commit_msg="1204版"
 git commit -m "%commit_msg%"
 
 REM 7. 推送到远程仓库
