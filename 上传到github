@@ -24,6 +24,11 @@ git pull origin main
 
 
 
+#############################上传#######################
+
+git config --global http.proxy http://127.0.0.1:7890
+git config --global https.proxy http://127.0.0.1:7890
+
 
 # 1. 确保已经初始化了Git
 git init
