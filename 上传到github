@@ -40,21 +40,14 @@ git remote add origin https://github.com/china20000420/-1128
 git branch
 git branch -M main
 
-REM 4. 显示当前状态
-echo 当前文件状态，哪些文件修改了：
+
+
 git status
-
-REM 5. 添加所有修改的文件
-echo 正在添加修改的文件...
 git add .
-
-REM 6. 提交更改
-set /p commit_msg="1204版"
-git commit -m "%commit_msg%"
-
-REM 7. 推送到远程仓库
-echo 正在推送到GitHub...
+git commit -m "1204v3"
 git push -f origin main
+
+
 
 REM 8. 完成提示
 echo ========================================

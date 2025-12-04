@@ -543,8 +543,19 @@ def get_category_detail(
             models.CategoryDetail.subcategory_name == subcategory_name
         ).first()
 
+        # 如果CategoryDetail不存在，创建一个空的
         if not category_data:
-            return {"description": "", "rows": [], "total": 0, "page": page, "page_size": page_size, "tokenCountTotal": "0", "actualTokenTotal": "0"}
+            category_data = models.CategoryDetail(
+                stage_id=stage.id,
+                category_name=category_name,
+                subcategory_name=subcategory_name,
+                description="",
+                token_count_total="0.00",
+                actual_token_total="0.00"
+            )
+            plan_db.add(category_data)
+            plan_db.commit()
+            plan_db.refresh(category_data)
 
         all_rows = category_data.rows
         total = len(all_rows)
@@ -558,8 +569,8 @@ def get_category_detail(
             "total": total,
             "page": page,
             "page_size": page_size,
-            "tokenCountTotal": category_data.token_count_total or "0",
-            "actualTokenTotal": category_data.actual_token_total or "0"
+            "tokenCountTotal": category_data.token_count_total or "0.00",
+            "actualTokenTotal": category_data.actual_token_total or "0.00"
         }
     finally:
         plan_db.close()
@@ -632,7 +643,13 @@ def update_description(
     try:
         stage = plan_db.query(models.Stage).filter(models.Stage.name == stage_name).first()
         if not stage:
-            raise HTTPException(status_code=404, detail="Stage not found")
+            # Create stage if it doesn't exist (consistent with GET endpoint)
+            max_order_result = plan_db.query(models.Stage).order_by(models.Stage.stage_order.desc()).first()
+            next_order = (max_order_result.stage_order + 1) if max_order_result else 0
+            stage = models.Stage(name=stage_name, stage_order=next_order, description="", categories=[])
+            plan_db.add(stage)
+            plan_db.commit()
+            plan_db.refresh(stage)
 
         category_data = plan_db.query(models.CategoryDetail).filter(
             models.CategoryDetail.stage_id == stage.id,
@@ -641,7 +658,17 @@ def update_description(
         ).first()
 
         if not category_data:
-            raise HTTPException(status_code=404, detail="Category not found")
+            # Create CategoryDetail if it doesn't exist
+            category_data = models.CategoryDetail(
+                stage_id=stage.id,
+                category_name=category_name,
+                subcategory_name=subcategory_name,
+                description="",
+                token_count_total="0.00",
+                actual_token_total="0.00"
+            )
+            plan_db.add(category_data)
+            plan_db.flush()
 
         category_data.description = data.get("description", "")
         plan_db.commit()
@@ -663,7 +690,13 @@ def update_row(
     try:
         stage = plan_db.query(models.Stage).filter(models.Stage.name == stage_name).first()
         if not stage:
-            raise HTTPException(status_code=404, detail="Stage not found")
+            # Create stage if it doesn't exist (consistent with GET endpoint)
+            max_order_result = plan_db.query(models.Stage).order_by(models.Stage.stage_order.desc()).first()
+            next_order = (max_order_result.stage_order + 1) if max_order_result else 0
+            stage = models.Stage(name=stage_name, stage_order=next_order, description="", categories=[])
+            plan_db.add(stage)
+            plan_db.commit()
+            plan_db.refresh(stage)
 
         category_data = plan_db.query(models.CategoryDetail).filter(
             models.CategoryDetail.stage_id == stage.id,
@@ -754,7 +787,13 @@ def delete_rows(
     try:
         stage = plan_db.query(models.Stage).filter(models.Stage.name == stage_name).first()
         if not stage:
-            raise HTTPException(status_code=404, detail="Stage not found")
+            # Create stage if it doesn't exist (consistent with GET endpoint)
+            max_order_result = plan_db.query(models.Stage).order_by(models.Stage.stage_order.desc()).first()
+            next_order = (max_order_result.stage_order + 1) if max_order_result else 0
+            stage = models.Stage(name=stage_name, stage_order=next_order, description="", categories=[])
+            plan_db.add(stage)
+            plan_db.commit()
+            plan_db.refresh(stage)
 
         category_data = plan_db.query(models.CategoryDetail).filter(
             models.CategoryDetail.stage_id == stage.id,
@@ -763,7 +802,23 @@ def delete_rows(
         ).first()
 
         if not category_data:
-            raise HTTPException(status_code=404, detail="Category not found")
+            # Create CategoryDetail if it doesn't exist (empty, nothing to delete)
+            category_data = models.CategoryDetail(
+                stage_id=stage.id,
+                category_name=category_name,
+                subcategory_name=subcategory_name,
+                description="",
+                token_count_total="0.00",
+                actual_token_total="0.00"
+            )
+            plan_db.add(category_data)
+            plan_db.commit()
+            return {
+                "success": True,
+                "total": 0,
+                "tokenCountTotal": "0.00",
+                "actualTokenTotal": "0.00"
+            }
 
         rows = [r for r in category_data.rows if r.get('key') not in data.keys]
         category_data.rows = rows

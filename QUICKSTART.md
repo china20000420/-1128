@@ -139,6 +139,7 @@ INFO:     Application startup complete.
 
 ```bash
 # 确保在项目根目录
+npm install
 npm run dev
 ```
 

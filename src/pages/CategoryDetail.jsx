@@ -337,14 +337,43 @@ export default function CategoryDetail() {
 
   const handleImport = (file) => {
     const reader = new FileReader()
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       try {
         const data = new Uint8Array(e.target.result)
-        const workbook = XLSX.read(data, { type: 'array', raw: false, cellText: true })
+        // 使用 raw: true 保持原始值，包括完整精度的数字
+        const workbook = XLSX.read(data, { type: 'array', raw: true })
         const sheet = workbook.Sheets[workbook.SheetNames[0]]
-        const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: false })
 
-        const newRows = jsonData.slice(1).map((row, idx) => ({
+        // 手动读取每个单元格，保留原始文本
+        const range = XLSX.utils.decode_range(sheet['!ref'])
+        const jsonData = []
+
+        for (let row = range.s.r; row <= range.e.r; row++) {
+          const rowData = []
+          for (let col = range.s.c; col <= range.e.c; col++) {
+            const cellAddress = XLSX.utils.encode_cell({ r: row, c: col })
+            const cell = sheet[cellAddress]
+
+            if (!cell) {
+              rowData.push('')
+              continue
+            }
+
+            // 优先使用原始文本 w，如果没有则使用格式化值 v
+            let cellValue = ''
+            if (cell.w !== undefined) {
+              cellValue = String(cell.w)  // 保留显示的文本，如 "8.125%"
+            } else if (cell.v !== undefined) {
+              cellValue = String(cell.v)
+            }
+
+            rowData.push(cellValue)
+          }
+          jsonData.push(rowData)
+        }
+
+        // 跳过标题行，生成数据行
+        const newRows = jsonData.slice(1).filter(row => row.some(cell => cell)).map((row, idx) => ({
           key: Date.now() + idx,
           hdfs_path: String(row[0] || ''),
           obs_fuzzy_path: String(row[1] || ''),
@@ -354,11 +383,57 @@ export default function CategoryDetail() {
           actual_token: String(row[5] || '')
         }))
 
-        setRows(newRows)
-        message.success('导入成功')
+        if (newRows.length === 0) {
+          message.warning('Excel文件中没有数据')
+          return
+        }
+
+        // 保存到数据库
+        message.loading({ content: `正在导入数据... (0/${newRows.length})`, key: 'import', duration: 0 })
+
+        // 批量保存每一行到数据库
+        let successCount = 0
+        let lastTokenTotal = '0'
+        let lastActualTotal = '0'
+
+        for (let i = 0; i < newRows.length; i++) {
+          const row = newRows[i]
+          try {
+            const res = await axios.patch(
+              `/api/plans/${planName}/stages/${stageName}/categories/${categoryName}/${subcategoryName}/row`,
+              row
+            )
+            successCount++
+
+            // 保存最后的Token统计
+            if (res.data) {
+              lastTokenTotal = res.data.tokenCountTotal || '0'
+              lastActualTotal = res.data.actualTokenTotal || '0'
+            }
+
+            // 更新进度
+            message.loading({
+              content: `正在导入数据... (${successCount}/${newRows.length})`,
+              key: 'import',
+              duration: 0
+            })
+          } catch (error) {
+            console.error(`导入第 ${i + 1} 行失败:`, error)
+          }
+        }
+
+        // 更新Token统计显示
+        setTokenCountTotal(lastTokenTotal)
+        setActualTokenTotal(lastActualTotal)
+
+        message.success({ content: `成功导入 ${successCount}/${newRows.length} 条数据`, key: 'import' })
+
+        // 重新加载数据
+        loadData(currentPage)
+
       } catch (error) {
         console.error('Import error:', error)
-        message.error('导入失败: ' + error.message)
+        message.error({ content: '导入失败: ' + error.message, key: 'import' })
       }
     }
     reader.readAsArrayBuffer(file)
