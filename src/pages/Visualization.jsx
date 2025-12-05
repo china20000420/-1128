@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Card, Row, Col, Typography, Spin, Select, Statistic, Table, Tabs, Empty, Tag, Progress } from 'antd'
+import { Card, Row, Col, Typography, Spin, Select, Statistic, Table, Tabs, Empty, Tag, Progress, Tooltip as AntTooltip } from 'antd'
 import { DatabaseOutlined, FileTextOutlined, FundOutlined, ThunderboltOutlined, BarChartOutlined, PieChartOutlined, LineChartOutlined, PercentageOutlined, RiseOutlined } from '@ant-design/icons'
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { useNavigate } from 'react-router-dom'
@@ -22,10 +22,10 @@ export default function Visualization() {
     if (selectedPlan) {
       loadVisualizationData(selectedPlan)
 
-      // 每30秒自动刷新一次数据
+      // 每1分钟自动刷新一次数据
       const interval = setInterval(() => {
         loadVisualizationData(selectedPlan)
-      }, 30000)
+      }, 60000)  // 60000ms = 1分钟
 
       return () => clearInterval(interval)
     }
@@ -59,47 +59,33 @@ export default function Visualization() {
     }
   }
 
-  // 自定义XAxis标签 - 旋转45度避免重叠
-  const CustomXAxisTick = ({ x, y, payload }) => {
-    return (
-      <g transform={`translate(${x},${y})`}>
-        <text
-          x={0}
-          y={0}
-          dy={16}
-          textAnchor="end"
-          fill="#666"
-          transform="rotate(-45)"
-          fontSize={12}
-        >
-          {payload.value}
-        </text>
-      </g>
-    )
+  // 格式化Token数值，添加B单位
+  const formatToken = (value) => {
+    if (value === null || value === undefined) return '0.00B'
+    return `${parseFloat(value).toFixed(2)}B`
   }
 
-  // 自定义YAxis标签 - 缩短文本避免重叠
-  const CustomYAxisTick = ({ x, y, payload }) => {
-    const maxLength = 20
-    let displayText = payload.value
-    if (displayText.length > maxLength) {
-      displayText = displayText.substring(0, maxLength) + '...'
+  // 自定义Tooltip - 显示B单位
+  const CustomTooltip = ({ active, payload, label }) => {
+    if (active && payload && payload.length) {
+      return (
+        <div style={{
+          backgroundColor: 'rgba(255, 255, 255, 0.96)',
+          border: '1px solid #d9d9d9',
+          borderRadius: 4,
+          padding: '12px',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
+        }}>
+          <div style={{ fontWeight: 'bold', marginBottom: 8, color: '#262626' }}>{label}</div>
+          {payload.map((entry, index) => (
+            <div key={index} style={{ color: entry.color, marginBottom: 4 }}>
+              {entry.name}: <span style={{ fontWeight: 'bold' }}>{formatToken(entry.value)}</span>
+            </div>
+          ))}
+        </div>
+      )
     }
-    return (
-      <g transform={`translate(${x},${y})`}>
-        <text
-          x={0}
-          y={0}
-          dx={-5}
-          dy={5}
-          textAnchor="end"
-          fill="#666"
-          fontSize={11}
-        >
-          {displayText}
-        </text>
-      </g>
-    )
+    return null
   }
 
   if (loading) {
@@ -150,6 +136,50 @@ export default function Visualization() {
 
   const { overview, stageStats, categoryStats, subcategoryStats, tokenTrends } = statsData
 
+  // 计算全局使用率
+  const globalUsageRate = overview.totalTokenCount > 0
+    ? (overview.totalActualToken / overview.totalTokenCount * 100)
+    : 0
+
+  // 构建三级结构的完整类别列表
+  const buildHierarchicalData = () => {
+    const hierarchical = []
+
+    // 按阶段分组
+    const stageGroups = {}
+    subcategoryStats.forEach(sub => {
+      if (!stageGroups[sub.stage]) {
+        stageGroups[sub.stage] = {}
+      }
+      if (!stageGroups[sub.stage][sub.category]) {
+        stageGroups[sub.stage][sub.category] = []
+      }
+      stageGroups[sub.stage][sub.category].push(sub)
+    })
+
+    // 构建层级数据
+    Object.keys(stageGroups).sort().forEach(stage => {
+      Object.keys(stageGroups[stage]).sort().forEach(category => {
+        const subcategories = stageGroups[stage][category]
+        subcategories.forEach(sub => {
+          hierarchical.push({
+            stage: stage,
+            category: category,
+            subcategory: sub.subcategory,
+            datasetCount: sub.datasetCount,
+            tokenCount: sub.tokenCount,
+            actualToken: sub.actualToken,
+            usageRate: sub.tokenCount > 0 ? (sub.actualToken / sub.tokenCount * 100) : 0
+          })
+        })
+      })
+    })
+
+    return hierarchical
+  }
+
+  const hierarchicalData = buildHierarchicalData()
+
   // Tab切换内容
   const tabItems = [
     {
@@ -157,45 +187,65 @@ export default function Visualization() {
       label: <span><BarChartOutlined /> 概览统计</span>,
       children: (
         <>
-          {/* 概览统计卡片 */}
+          {/* 概览统计卡片 - 5个卡片 */}
           <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
-            <Col xs={24} sm={12} lg={6}>
-              <Card>
+            <Col xs={24} sm={12} md={8} lg={4}>
+              <Card hoverable>
                 <Statistic
                   title="阶段总数"
                   value={overview.totalStages}
                   prefix={<DatabaseOutlined />}
-                  valueStyle={{ color: '#1890ff' }}
+                  valueStyle={{ color: '#1890ff', fontSize: 28 }}
                 />
               </Card>
             </Col>
-            <Col xs={24} sm={12} lg={6}>
-              <Card>
+            <Col xs={24} sm={12} md={8} lg={5}>
+              <Card hoverable>
                 <Statistic
                   title="一级类别总数"
                   value={overview.totalCategories}
                   prefix={<FileTextOutlined />}
-                  valueStyle={{ color: '#52c41a' }}
+                  valueStyle={{ color: '#52c41a', fontSize: 28 }}
                 />
               </Card>
             </Col>
-            <Col xs={24} sm={12} lg={6}>
-              <Card>
+            <Col xs={24} sm={12} md={8} lg={5}>
+              <Card hoverable>
                 <Statistic
                   title="数据集总Token (DST)"
-                  value={overview.totalTokenCount.toFixed(2)}
+                  value={formatToken(overview.totalTokenCount)}
                   prefix={<FundOutlined />}
-                  valueStyle={{ color: '#faad14' }}
+                  valueStyle={{ color: '#faad14', fontSize: 24 }}
                 />
               </Card>
             </Col>
-            <Col xs={24} sm={12} lg={6}>
-              <Card>
+            <Col xs={24} sm={12} md={12} lg={5}>
+              <Card hoverable>
                 <Statistic
                   title="实际使用Token (AUT)"
-                  value={overview.totalActualToken.toFixed(2)}
+                  value={formatToken(overview.totalActualToken)}
                   prefix={<ThunderboltOutlined />}
-                  valueStyle={{ color: '#f5222d' }}
+                  valueStyle={{ color: '#f5222d', fontSize: 24 }}
+                />
+              </Card>
+            </Col>
+            <Col xs={24} sm={12} md={12} lg={5}>
+              <Card hoverable>
+                <Statistic
+                  title="全局使用率"
+                  value={globalUsageRate.toFixed(2)}
+                  suffix="%"
+                  prefix={<PercentageOutlined />}
+                  valueStyle={{
+                    color: globalUsageRate >= 90 ? '#52c41a' : globalUsageRate >= 70 ? '#faad14' : '#f5222d',
+                    fontSize: 28
+                  }}
+                />
+                <Progress
+                  percent={parseFloat(globalUsageRate.toFixed(2))}
+                  strokeColor={globalUsageRate >= 90 ? '#52c41a' : globalUsageRate >= 70 ? '#faad14' : '#f5222d'}
+                  showInfo={false}
+                  style={{ marginTop: 8 }}
                 />
               </Card>
             </Col>
@@ -204,17 +254,48 @@ export default function Visualization() {
           {/* Token累计趋势 - 最重要的可视化 */}
           <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
             <Col xs={24}>
-              <Card title={<span><LineChartOutlined /> 各阶段Token累计趋势</span>} bordered={false}>
+              <Card
+                title={<span><LineChartOutlined /> 各阶段Token累计趋势</span>}
+                bordered={false}
+                hoverable
+              >
                 {tokenTrends.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={400}>
-                    <LineChart data={tokenTrends} margin={{ bottom: 60 }}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="stage" tick={<CustomXAxisTick />} height={80} />
-                      <YAxis />
-                      <Tooltip formatter={(value) => value.toFixed(2)} />
-                      <Legend />
-                      <Line type="monotone" dataKey="cumulativeTokenCount" name="累计DST" stroke="#8884d8" strokeWidth={3} dot={{ r: 5 }} />
-                      <Line type="monotone" dataKey="cumulativeActualToken" name="累计AUT" stroke="#82ca9d" strokeWidth={3} dot={{ r: 5 }} />
+                  <ResponsiveContainer width="100%" height={450}>
+                    <LineChart data={tokenTrends} margin={{ top: 20, right: 30, left: 20, bottom: 80 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                      <XAxis
+                        dataKey="stage"
+                        height={60}
+                        tick={{ fontSize: 12, fill: '#666' }}
+                        angle={0}
+                      />
+                      <YAxis
+                        tick={{ fontSize: 12, fill: '#666' }}
+                        tickFormatter={(value) => `${(value / 1).toFixed(0)}B`}
+                      />
+                      <Tooltip content={<CustomTooltip />} />
+                      <Legend
+                        wrapperStyle={{ paddingTop: 20 }}
+                        iconType="line"
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="cumulativeTokenCount"
+                        name="累计DST"
+                        stroke="#1890ff"
+                        strokeWidth={3}
+                        dot={{ r: 6, fill: '#1890ff' }}
+                        activeDot={{ r: 8 }}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="cumulativeActualToken"
+                        name="累计AUT"
+                        stroke="#52c41a"
+                        strokeWidth={3}
+                        dot={{ r: 6, fill: '#52c41a' }}
+                        activeDot={{ r: 8 }}
+                      />
                     </LineChart>
                   </ResponsiveContainer>
                 ) : (
@@ -227,17 +308,41 @@ export default function Visualization() {
           {/* 各阶段Token对比 */}
           <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
             <Col xs={24}>
-              <Card title={<span><BarChartOutlined /> 各阶段Token统计对比</span>} bordered={false}>
+              <Card
+                title={<span><BarChartOutlined /> 各阶段Token统计对比</span>}
+                bordered={false}
+                hoverable
+              >
                 {stageStats.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={400}>
-                    <BarChart data={stageStats} margin={{ bottom: 60 }}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="stage" tick={<CustomXAxisTick />} height={80} />
-                      <YAxis />
-                      <Tooltip formatter={(value) => value.toFixed(2)} />
-                      <Legend />
-                      <Bar dataKey="tokenCount" name="数据集总Token (DST)" fill="#8884d8" />
-                      <Bar dataKey="actualToken" name="实际使用Token (AUT)" fill="#82ca9d" />
+                  <ResponsiveContainer width="100%" height={450}>
+                    <BarChart data={stageStats} margin={{ top: 20, right: 30, left: 20, bottom: 80 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                      <XAxis
+                        dataKey="stage"
+                        height={60}
+                        tick={{ fontSize: 12, fill: '#666' }}
+                        angle={0}
+                      />
+                      <YAxis
+                        tick={{ fontSize: 12, fill: '#666' }}
+                        tickFormatter={(value) => `${(value / 1).toFixed(0)}B`}
+                      />
+                      <Tooltip content={<CustomTooltip />} />
+                      <Legend
+                        wrapperStyle={{ paddingTop: 20 }}
+                      />
+                      <Bar
+                        dataKey="tokenCount"
+                        name="数据集总Token (DST)"
+                        fill="#1890ff"
+                        radius={[8, 8, 0, 0]}
+                      />
+                      <Bar
+                        dataKey="actualToken"
+                        name="实际使用Token (AUT)"
+                        fill="#52c41a"
+                        radius={[8, 8, 0, 0]}
+                      />
                     </BarChart>
                   </ResponsiveContainer>
                 ) : (
@@ -250,16 +355,30 @@ export default function Visualization() {
           {/* 各阶段数据集数量 */}
           <Row gutter={[16, 16]}>
             <Col xs={24}>
-              <Card title={<span><BarChartOutlined /> 各阶段数据集数量</span>} bordered={false}>
+              <Card
+                title={<span><BarChartOutlined /> 各阶段数据集数量</span>}
+                bordered={false}
+                hoverable
+              >
                 {stageStats.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={350}>
-                    <BarChart data={stageStats} margin={{ bottom: 60 }}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="stage" tick={<CustomXAxisTick />} height={80} />
-                      <YAxis />
+                  <ResponsiveContainer width="100%" height={400}>
+                    <BarChart data={stageStats} margin={{ top: 20, right: 30, left: 20, bottom: 80 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                      <XAxis
+                        dataKey="stage"
+                        height={60}
+                        tick={{ fontSize: 12, fill: '#666' }}
+                        angle={0}
+                      />
+                      <YAxis tick={{ fontSize: 12, fill: '#666' }} />
                       <Tooltip />
-                      <Legend />
-                      <Bar dataKey="datasetCount" name="数据集数量" fill="#ffc658" />
+                      <Legend wrapperStyle={{ paddingTop: 20 }} />
+                      <Bar
+                        dataKey="datasetCount"
+                        name="数据集数量"
+                        fill="#faad14"
+                        radius={[8, 8, 0, 0]}
+                      />
                     </BarChart>
                   </ResponsiveContainer>
                 ) : (
@@ -276,43 +395,63 @@ export default function Visualization() {
       label: <span><PieChartOutlined /> 类别统计</span>,
       children: (
         <>
-          {/* 一级类别详细统计表 */}
-          <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+          {/* 完整的三级层次结构统计表 */}
+          <Row gutter={[16, 16]}>
             <Col xs={24}>
-              <Card title="一级类别详细统计" bordered={false}>
+              <Card
+                title={
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span>完整类别层次统计</span>
+                    <Tag color="blue">共 {hierarchicalData.length} 个二级类别</Tag>
+                  </div>
+                }
+                bordered={false}
+              >
                 <Table
-                  dataSource={categoryStats}
-                  rowKey={(record) => `${record.stage}_${record.category}`}
+                  dataSource={hierarchicalData}
+                  rowKey={(record, index) => `${record.stage}_${record.category}_${record.subcategory}_${index}`}
                   pagination={{
-                    pageSize: 20,
+                    pageSize: 50,
                     showSizeChanger: true,
+                    pageSizeOptions: ['20', '50', '100', '200'],
                     showQuickJumper: true,
-                    showTotal: (total) => `共 ${total} 条`
+                    showTotal: (total) => `共 ${total} 条数据`
                   }}
                   columns={[
+                    {
+                      title: '阶段',
+                      dataIndex: 'stage',
+                      key: 'stage',
+                      fixed: 'left',
+                      width: 120,
+                      sorter: (a, b) => a.stage.localeCompare(b.stage),
+                      render: (text) => <Text strong style={{ color: '#1890ff' }}>{text}</Text>
+                    },
                     {
                       title: '一级类别',
                       dataIndex: 'category',
                       key: 'category',
                       fixed: 'left',
-                      width: 180,
-                      sorter: (a, b) => a.category.localeCompare(b.category)
-                    },
-                    {
-                      title: '所属阶段',
-                      dataIndex: 'stage',
-                      key: 'stage',
                       width: 150,
-                      sorter: (a, b) => a.stage.localeCompare(b.stage)
+                      sorter: (a, b) => a.category.localeCompare(b.category),
+                      render: (text) => <Text strong>{text}</Text>
                     },
                     {
-                      title: '二级类别数',
-                      dataIndex: 'subcategoryCount',
-                      key: 'subcategoryCount',
-                      width: 120,
-                      align: 'right',
-                      sorter: (a, b) => a.subcategoryCount - b.subcategoryCount,
-                      defaultSortOrder: 'descend'
+                      title: '二级类别',
+                      dataIndex: 'subcategory',
+                      key: 'subcategory',
+                      width: 180,
+                      sorter: (a, b) => a.subcategory.localeCompare(b.subcategory),
+                      render: (text, record) => (
+                        <AntTooltip title="点击查看详情">
+                          <a
+                            onClick={() => navigate(`/plan/${selectedPlan}/${record.stage}/${record.category}/${record.subcategory}`)}
+                            style={{ color: '#1890ff', fontWeight: 500 }}
+                          >
+                            {text}
+                          </a>
+                        </AntTooltip>
+                      )
                     },
                     {
                       title: '数据集数量',
@@ -320,7 +459,8 @@ export default function Visualization() {
                       key: 'datasetCount',
                       width: 120,
                       align: 'right',
-                      sorter: (a, b) => a.datasetCount - b.datasetCount
+                      sorter: (a, b) => a.datasetCount - b.datasetCount,
+                      render: (val) => <Text>{val}</Text>
                     },
                     {
                       title: '数据集总Token (DST)',
@@ -329,7 +469,8 @@ export default function Visualization() {
                       width: 180,
                       align: 'right',
                       sorter: (a, b) => a.tokenCount - b.tokenCount,
-                      render: (val) => <Text strong style={{ color: '#faad14' }}>{val.toFixed(2)}</Text>
+                      defaultSortOrder: 'descend',
+                      render: (val) => <Text strong style={{ color: '#faad14' }}>{formatToken(val)}</Text>
                     },
                     {
                       title: '实际使用Token (AUT)',
@@ -338,97 +479,38 @@ export default function Visualization() {
                       width: 180,
                       align: 'right',
                       sorter: (a, b) => a.actualToken - b.actualToken,
-                      render: (val) => <Text strong style={{ color: '#f5222d' }}>{val.toFixed(2)}</Text>
+                      render: (val) => <Text strong style={{ color: '#52c41a' }}>{formatToken(val)}</Text>
                     },
                     {
                       title: '使用率',
                       dataIndex: 'usageRate',
                       key: 'usageRate',
-                      width: 120,
+                      width: 150,
                       align: 'right',
                       sorter: (a, b) => a.usageRate - b.usageRate,
                       render: (val) => {
-                        const color = val >= 90 ? '#52c41a' : val >= 70 ? '#faad14' : '#f5222d'
-                        return <Text strong style={{ color }}>{val.toFixed(2)}%</Text>
+                        const rate = parseFloat(val)
+                        const color = rate >= 90 ? '#52c41a' : rate >= 70 ? '#faad14' : '#f5222d'
+                        return (
+                          <div>
+                            <Text strong style={{ color, fontSize: 15 }}>{rate.toFixed(2)}%</Text>
+                            <Progress
+                              percent={parseFloat(rate.toFixed(2))}
+                              strokeColor={color}
+                              showInfo={false}
+                              size="small"
+                              style={{ marginTop: 4 }}
+                            />
+                          </div>
+                        )
                       }
                     }
                   ]}
                   scroll={{ x: 1200 }}
                   size="small"
+                  bordered
+                  rowClassName={(record, index) => index % 2 === 0 ? 'table-row-light' : 'table-row-dark'}
                 />
-              </Card>
-            </Col>
-          </Row>
-
-          {/* 二级类别Top 10表格 */}
-          <Row gutter={[16, 16]}>
-            <Col xs={24}>
-              <Card title="二级类别Token使用 Top 10" bordered={false}>
-                {subcategoryStats.length > 0 ? (
-                  <Table
-                    dataSource={subcategoryStats.slice(0, 10)}
-                    rowKey={(record, index) => index}
-                    pagination={false}
-                    columns={[
-                      {
-                        title: '排名',
-                        key: 'rank',
-                        width: 80,
-                        align: 'center',
-                        render: (_, __, index) => {
-                          const colors = ['#faad14', '#52c41a', '#1890ff']
-                          const color = index < 3 ? colors[index] : '#666'
-                          return <Text strong style={{ color, fontSize: 16 }}>{index + 1}</Text>
-                        }
-                      },
-                      {
-                        title: '二级类别',
-                        dataIndex: 'subcategory',
-                        key: 'subcategory',
-                        width: 180
-                      },
-                      {
-                        title: '一级类别',
-                        dataIndex: 'category',
-                        key: 'category',
-                        width: 150
-                      },
-                      {
-                        title: '所属阶段',
-                        dataIndex: 'stage',
-                        key: 'stage',
-                        width: 120
-                      },
-                      {
-                        title: '数据集数量',
-                        dataIndex: 'datasetCount',
-                        key: 'datasetCount',
-                        width: 120,
-                        align: 'right'
-                      },
-                      {
-                        title: '数据集总Token (DST)',
-                        dataIndex: 'tokenCount',
-                        key: 'tokenCount',
-                        width: 180,
-                        align: 'right',
-                        render: (val) => <Text strong style={{ color: '#faad14' }}>{val.toFixed(2)}</Text>
-                      },
-                      {
-                        title: '实际使用Token (AUT)',
-                        dataIndex: 'actualToken',
-                        key: 'actualToken',
-                        width: 180,
-                        align: 'right',
-                        render: (val) => <Text strong style={{ color: '#f5222d' }}>{val.toFixed(2)}</Text>
-                      }
-                    ]}
-                    scroll={{ x: 1000 }}
-                    size="small"
-                  />
-                ) : (
-                  <Empty description="暂无数据" />
-                )}
               </Card>
             </Col>
           </Row>
@@ -479,8 +561,23 @@ export default function Visualization() {
 
   return (
     <div>
+      <style>{`
+        .table-row-light {
+          background-color: #fafafa;
+        }
+        .table-row-dark {
+          background-color: #ffffff;
+        }
+        .ant-table-tbody > tr:hover > td {
+          background-color: #e6f7ff !important;
+        }
+      `}</style>
+
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-        <Title level={2}>数据可视化分析</Title>
+        <Title level={2}>
+          <RiseOutlined style={{ marginRight: 8 }} />
+          数据可视化分析
+        </Title>
         <Select
           value={selectedPlan}
           onChange={setSelectedPlan}
